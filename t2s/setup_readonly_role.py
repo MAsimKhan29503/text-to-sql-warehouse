@@ -35,7 +35,7 @@ def main() -> None:
 
             # 2) Safety settings that apply to every session of this role.
             for setting in (
-                "statement_timeout = '15s'",
+                "statement_timeout = '30s'",
                 "idle_in_transaction_session_timeout = '30s'",
                 "default_transaction_read_only = on",
             ):
