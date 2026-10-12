@@ -20,8 +20,10 @@ class Settings:
     pg_host: str
     pg_port: int
     pg_db: str
-    pg_user: str
+    pg_user: str          # owner account: admin scripts only
     pg_password: str
+    pg_ro_user: str       # read-only account: the app uses this one
+    pg_ro_password: str
 
 
 def get_settings() -> Settings:
@@ -33,4 +35,6 @@ def get_settings() -> Settings:
         pg_db=_require("PG_DB"),
         pg_user=_require("PG_USER"),
         pg_password=_require("PG_PASSWORD"),
+        pg_ro_user=os.getenv("PG_RO_USER", "text2sql_ro"),
+        pg_ro_password=_require("PG_RO_PASSWORD"),
     )
