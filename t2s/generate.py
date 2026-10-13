@@ -26,6 +26,20 @@ RULES
 7. When the answer needs repository names or account names, join the dimension tables. Qualify every column with its table alias.
 8. If the question cannot be answered with these tables, output exactly one line: -- CANNOT_ANSWER: <short reason>
 9. Relative dates are relative to the last day of data. "Last N days" or "last week" (7 days) means the N days ending on and including that last day; "yesterday" means the day before it. Use the last day from DATA COVERS as a literal date.
+10. For "top N" or ranking questions, rank on the fact table FIRST and join dimension tables LAST, so the join touches only N rows. Follow this pattern:
+
+WITH ranked AS (
+    SELECT repo_id, SUM(forks) AS total_forks
+    FROM analytics_marts.fct_daily_repo_activity
+    WHERE event_date BETWEEN DATE '2026-10-01' AND DATE '2026-10-07'
+    GROUP BY repo_id
+    ORDER BY total_forks DESC
+    LIMIT 10
+)
+SELECT r.repo_name, ranked.total_forks
+FROM ranked
+JOIN analytics_marts.dim_repo AS r ON r.repo_id = ranked.repo_id
+ORDER BY ranked.total_forks DESC
 """
 
 _FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -85,7 +99,7 @@ def generate_sql(question: str) -> Generation:
         return Generation(question, None, raw, raw, seconds, tokens)  # plain-text refusal
     return Generation(question, sql, None, raw, seconds, tokens)
 
-    
+
 if __name__ == "__main__":
     question = " ".join(sys.argv[1:]).strip()
     if not question:
