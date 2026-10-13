@@ -51,6 +51,10 @@ def extract_sql(text: str) -> str:
     return (match.group(1) if match else text).strip()
 
 
+def _looks_like_sql(text: str) -> bool:
+    return re.match(r"\s*(select|with|\()", text, re.IGNORECASE) is not None
+
+
 def generate_sql(question: str) -> Generation:
     s = get_settings()
     client = Groq(api_key=s.groq_api_key)
@@ -72,13 +76,16 @@ def generate_sql(question: str) -> Generation:
     if not raw:
         raise RuntimeError("Model returned no text. Try raising max_completion_tokens.")
 
+    tokens = resp.usage.total_tokens
     sql = extract_sql(raw)
     if sql.upper().startswith("-- CANNOT_ANSWER"):
-        return Generation(question, None, sql.removeprefix("-- CANNOT_ANSWER:").strip(),
-                          raw, seconds, resp.usage.total_tokens)
-    return Generation(question, sql, None, raw, seconds, resp.usage.total_tokens)
+        reason = sql.removeprefix("-- CANNOT_ANSWER:").strip()
+        return Generation(question, None, reason, raw, seconds, tokens)
+    if not _FENCE.search(raw) and not _looks_like_sql(sql):
+        return Generation(question, None, raw, raw, seconds, tokens)  # plain-text refusal
+    return Generation(question, sql, None, raw, seconds, tokens)
 
-
+    
 if __name__ == "__main__":
     question = " ".join(sys.argv[1:]).strip()
     if not question:
