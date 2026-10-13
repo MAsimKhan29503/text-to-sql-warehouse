@@ -4,10 +4,12 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 
+
 from groq import Groq
 
 from t2s.config import get_settings
 from t2s.schema_context import build_schema_context
+from t2s.guardrails import validate_sql
 
 PROMPT_TEMPLATE = """You are a PostgreSQL analyst for a data warehouse of GitHub public events.
 Turn the user's question into ONE read-only SQL query.
@@ -84,7 +86,13 @@ if __name__ == "__main__":
     g = generate_sql(question)
     print(f"Question: {g.question}\n")
     if g.sql:
-        print(g.sql)
+        check = validate_sql(g.sql)
+        if check.ok:
+            print("Validated SQL (this is exactly what would run):\n")
+            print(check.sql)
+        else:
+            print(f"BLOCKED by guardrails: {check.error}\n")
+            print(f"Model wrote:\n{g.sql}")
     else:
         print(f"Model declined: {g.refusal}")
     print(f"\n[{g.seconds:.1f}s, {g.total_tokens} tokens]")
