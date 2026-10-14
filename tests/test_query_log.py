@@ -8,7 +8,7 @@ from t2s.generate import Generation
 def test_every_answer_is_logged_with_its_source(monkeypatch):
     seen = []
     monkeypatch.setattr(pipeline, "log_answer", lambda answer, source: seen.append((answer.status, source)))
-    monkeypatch.setattr(pipeline, "generate_sql", lambda q: Generation(q, None, "no such data", "", 0.1, 5))
+    monkeypatch.setattr(pipeline, "generate_sql", lambda q, history=None: Generation(q, None, "no such data", "", 0.1, 5))
     pipeline.ask("q", source="eval")
     assert seen == [("declined", "eval")]
 

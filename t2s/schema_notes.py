@@ -18,7 +18,7 @@ COLUMN_NOTES = {
     ("fct_events", "event_type"): (
         "one of: PushEvent, PullRequestEvent, WatchEvent (a repo star), IssuesEvent, ForkEvent"
     ),
-    ("fct_events", "created_at"): "when the event happened",
+    ("fct_events", "created_at"): "when the event happened (UTC)",
     ("fct_events", "event_date"): "calendar date of created_at; use this for date filters",
     ("fct_events", "action"): "action within the event (for example opened or closed); may be NULL",
     ("fct_events", "loaded_at"): "when the row was loaded into the warehouse (pipeline metadata)",

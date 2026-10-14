@@ -19,7 +19,7 @@ LOGGER_MUST_FAIL = [
 
 def check_logger_can_append(conn) -> bool:
     try:
-        conn.execute(INSERT, ("selftest", "self-test question", "ok", None, None, None, 0, 0.0, 0, 0, "none"))
+        conn.execute(INSERT, ("selftest", "self-test question", "ok", None, None, None, 0, 0.0, 0, 0, "none",1))
         print("  PASS logger can INSERT (rolled back, nothing kept)")
         return True
     except Exception as e:

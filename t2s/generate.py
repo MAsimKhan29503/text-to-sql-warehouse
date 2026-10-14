@@ -69,7 +69,7 @@ def _looks_like_sql(text: str) -> bool:
     return re.match(r"\s*(select|with|\()", text, re.IGNORECASE) is not None
 
 
-def generate_sql(question: str) -> Generation:
+def generate_sql(question: str , history: list[dict] | None = None) -> Generation:
     s = get_settings()
     client = Groq(api_key=s.groq_api_key)
 
@@ -79,6 +79,7 @@ def generate_sql(question: str) -> Generation:
         messages=[
             {"role": "system", "content": PROMPT_TEMPLATE.format(schema_context=_schema_context())},
             {"role": "user", "content": question},
+            *(history or []),  # earlier attempts and their error messages, if any
         ],
         temperature=0,
         max_completion_tokens=2048,  # reasoning tokens count too, so keep this generous

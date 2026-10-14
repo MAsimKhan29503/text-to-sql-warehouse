@@ -38,6 +38,7 @@ def main() -> None:
                 "statement_timeout = '30s'",
                 "idle_in_transaction_session_timeout = '30s'",
                 "default_transaction_read_only = on",
+                "work_mem = '32MB'",
             ):
                 cur.execute(
                     sql.SQL("ALTER ROLE {role} SET ").format(role=role) + sql.SQL(setting)

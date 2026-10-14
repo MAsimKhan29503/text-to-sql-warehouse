@@ -19,7 +19,8 @@ create table if not exists text2sql.query_log (
     llm_seconds   numeric(8, 2),
     db_ms         integer,
     tokens        integer,
-    model         text
+    model         text,
+    attempts      integer not null default 1
 )
 """
 
@@ -38,6 +39,8 @@ def main() -> None:
             # 1) A separate schema keeps app data away from the analytics marts.
             cur.execute(f"create schema if not exists {SCHEMA}")
             cur.execute(CREATE_TABLE)
+                          # Added in Step 8; this line upgrades a table created in Step 7.
+            cur.execute(f"alter table {SCHEMA}.query_log add column if not exists attempts integer not null default 1")
             cur.execute(f"create index if not exists idx_query_log_asked_at on {SCHEMA}.query_log (asked_at)")
             print(f"  OK   table {SCHEMA}.query_log ready")
 

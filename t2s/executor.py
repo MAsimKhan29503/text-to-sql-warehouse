@@ -49,5 +49,10 @@ def run_query(sql: str) -> QueryResult:
             False, error_kind="timeout", milliseconds=elapsed(),
             error="The query took too long and was cancelled. Aggregate more, or filter to fewer days.",
         )
-    except psycopg.Error as e:
+    except psycopg.OperationalError as e:  # server down, refused connection, too many connections
+        return QueryResult(
+            False, error_kind="unavailable", milliseconds=elapsed(),
+            error=f"The database is unavailable: {str(e).strip()}",
+        )
+    except psycopg.Error as e:  # the SQL itself was wrong (unknown column, bad syntax, ...)
         return QueryResult(False, error=_clean_error(e), error_kind="database", milliseconds=elapsed())

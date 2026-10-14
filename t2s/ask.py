@@ -24,8 +24,12 @@ if __name__ == "__main__":
         print(f"SQL:\n{a.sql}\n")
         print(format_table(a.columns, a.rows))
         print(f"\n{len(a.rows)} rows | LLM {a.llm_seconds:.1f}s | database {a.db_ms} ms | {a.tokens} tokens")
+        if a.attempts > 1:
+            print(f"(took {a.attempts} attempts: {a.message})")
     else:
         print(f"[{a.status.upper()}] {a.message}")
+        if a.attempts > 1:
+            print(f"(after {a.attempts} attempts)")
         if a.sql:
             print(f"\nSQL that failed:\n{a.sql}")
         elif a.raw_sql:

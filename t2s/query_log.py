@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 INSERT = """
 insert into text2sql.query_log
     (source, question, status, raw_sql, executed_sql, message,
-     row_count, llm_seconds, db_ms, tokens, model)
-values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     row_count, llm_seconds, db_ms, tokens, model, attempts)
+values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 
@@ -25,7 +25,7 @@ def log_answer(answer: "Answer", source: str = "cli") -> None:
         params = (
             source, answer.question, answer.status, answer.raw_sql, answer.sql, answer.message,
             len(answer.rows) if answer.status == "ok" else None,
-            round(answer.llm_seconds, 2), answer.db_ms, answer.tokens, s.groq_model,
+            round(answer.llm_seconds, 2), answer.db_ms, answer.tokens, s.groq_model, answer.attempts,
         )
         with psycopg.connect(
             host=s.pg_host, port=s.pg_port, dbname=s.pg_db,
