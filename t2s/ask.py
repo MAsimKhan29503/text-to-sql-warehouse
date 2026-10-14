@@ -1,7 +1,7 @@
 import sys
 
 from t2s.pipeline import ask
-
+from t2s.schema_context import coverage_note, load_schema_context
 
 def format_table(columns: list[str], rows: list[tuple], max_width: int = 40) -> str:
     cells = [["NULL" if v is None else str(v)[:max_width] for v in row] for row in rows]
@@ -26,6 +26,9 @@ if __name__ == "__main__":
         print(f"\n{len(a.rows)} rows | LLM {a.llm_seconds:.1f}s | database {a.db_ms} ms | {a.tokens} tokens")
         if a.attempts > 1:
             print(f"(took {a.attempts} attempts: {a.message})")
+        note = coverage_note(load_schema_context())
+        if note:
+            print(f"\n{note}")
     else:
         print(f"[{a.status.upper()}] {a.message}")
         if a.attempts > 1:
