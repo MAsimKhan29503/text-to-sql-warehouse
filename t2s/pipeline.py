@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from t2s.executor import run_query
 from t2s.generate import generate_sql
 from t2s.guardrails import validate_sql
-
+from t2s.query_log import log_answer
 
 @dataclass
 class Answer:
@@ -19,7 +19,7 @@ class Answer:
     tokens: int = 0
 
 
-def ask(question: str) -> Answer:
+def _answer(question: str) -> Answer:
     try:
         gen = generate_sql(question)
     except Exception as e:  # network error, rate limit, bad key: report it, don't crash
@@ -41,3 +41,9 @@ def ask(question: str) -> Answer:
 
     return Answer(status="ok", sql=check.sql, columns=result.columns, rows=result.rows,
                   db_ms=result.milliseconds, **base)
+
+def ask(question: str, source: str = "cli") -> Answer:
+       """The single entry point: generate, validate, execute, log."""
+       answer = _answer(question)
+       log_answer(answer, source)
+       return answer

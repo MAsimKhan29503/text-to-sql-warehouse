@@ -24,6 +24,8 @@ class Settings:
     pg_password: str
     pg_ro_user: str       # read-only account: the app uses this one
     pg_ro_password: str
+    pg_log_user: str      # query-log account: can only append to and read text2sql.query_log
+    pg_log_password: str
 
 
 def get_settings() -> Settings:
@@ -37,4 +39,6 @@ def get_settings() -> Settings:
         pg_password=_require("PG_PASSWORD"),
         pg_ro_user=os.getenv("PG_RO_USER", "text2sql_ro"),
         pg_ro_password=_require("PG_RO_PASSWORD"),
+        pg_log_user=os.getenv("PG_LOG_USER", "text2sql_logger"),
+        pg_log_password=_require("PG_LOG_PASSWORD"),
     )
