@@ -161,7 +161,7 @@ def coverage_note(ctx: SchemaContext) -> str | None:
     if not parts:
         return None
     return (f"Data note: relative dates count from the last complete day, {ctx.last_complete_day}. "
-            + "; ".join(parts) + ".")
+            + "; ".join(parts) + ". Results that include those days may be undercounted.")
 
 
 if __name__ == "__main__":

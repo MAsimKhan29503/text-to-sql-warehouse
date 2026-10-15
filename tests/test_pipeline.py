@@ -101,6 +101,15 @@ def test_database_outage_is_not_retried(monkeypatch):
     a = pipeline.ask("q")
     assert a.status == "failed" and a.attempts == 1 and len(calls) == 1
 
+def test_resource_errors_are_retried_with_the_message(monkeypatch):
+    results = [QueryResult(False, error="needed more memory", error_kind="resources"),
+               QueryResult(True, ["repo_id"], [(1,)], milliseconds=5)]
+    calls = script(monkeypatch, fake_generation(sql=GOOD), fake_generation(sql=GOOD))
+    monkeypatch.setattr(pipeline, "run_query", lambda sql: results.pop(0))
+    a = pipeline.ask("q")
+    assert a.status == "ok" and a.attempts == 2
+    assert "needed more memory" in calls[1][-1]["content"]
+
 
 def test_llm_failure_is_reported_not_raised(monkeypatch):
     def boom(question, history=None):

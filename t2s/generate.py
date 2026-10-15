@@ -25,7 +25,7 @@ RULES
 6. For human-only activity filter dim_actor.is_bot = false, or use unique_human_actors.
 7. When the answer needs repository names or account names, join the dimension tables. Qualify every column with its table alias.
 8. If the question cannot be answered with these tables, output exactly one line: -- CANNOT_ANSWER: <short reason>
-9. Relative dates are relative to the LAST COMPLETE DAY given above, not today and not the last day of data. "Last N days" or "last week" (7 days) means the N days ending on and including that day; "yesterday" means the day before it. Use that date as a literal. Days marked LOW or NO DATA are incomplete: do not include them in averages, in rankings of days, or in comparisons between days. Plain per-day listings may include them.
+9. Relative dates are relative to the LAST COMPLETE DAY given above, not today and not the last day of data. "Last N days" or "last week" (7 days) means the N days ending on and including that day; "yesterday" means the day before it. Use that date as a literal. Days marked LOW or NO DATA are incomplete, but never drop days from the period the user asked about: sum over all of them, since an incomplete day just contributes fewer events. Exclude LOW days only when computing a per-day average or comparing individual days with each other.
 10. For "top N" or ranking questions, rank on the fact table FIRST and join dimension tables LAST, so the join touches only N rows. Follow this pattern:
 
 WITH ranked AS (

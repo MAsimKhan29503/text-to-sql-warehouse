@@ -49,6 +49,14 @@ def run_query(sql: str) -> QueryResult:
             False, error_kind="timeout", milliseconds=elapsed(),
             error="The query took too long and was cancelled. Aggregate more, or filter to fewer days.",
         )
+
+    except (errors.DiskFull, errors.OutOfMemory):  # the plan needed more memory or disk than the server has
+        return QueryResult(
+            False, error_kind="resources", milliseconds=elapsed(),
+            error="The query needed more memory or disk space than the database has. "
+                  "Use a narrower date range, filter earlier, or aggregate before joining.",
+        )
+    
     except psycopg.OperationalError as e:  # server down, refused connection, too many connections
         return QueryResult(
             False, error_kind="unavailable", milliseconds=elapsed(),
