@@ -75,3 +75,33 @@ def test_small_limit_is_kept():
 def test_huge_limit_is_clamped(limit):
     result = validate_sql(f"select repo_id from analytics_marts.dim_repo limit {limit}")
     assert result.sql.endswith("LIMIT 100")
+
+
+
+
+FIXABLE_SLIPS = [
+    "select * from dim_repo",            # forgot the schema prefix
+    "select 1; select 2",                # stray second statement
+    "select from where ((",              # broken syntax
+    "",
+]
+POLICY_VIOLATIONS = [
+    "drop table analytics_marts.dim_repo",
+    "select * from raw.gh_events",
+    "select pg_sleep(60)",
+    "select * from analytics_marts.dim_repo for update",
+    "select * from other.analytics_marts.dim_repo",
+    "select * from generate_series(1, 5)",
+]
+
+
+@pytest.mark.parametrize("sql", FIXABLE_SLIPS)
+def test_slips_are_marked_retryable(sql):
+    result = validate_sql(sql)
+    assert not result.ok and result.retryable
+
+
+@pytest.mark.parametrize("sql", POLICY_VIOLATIONS)
+def test_policy_violations_are_not_retryable(sql):
+    result = validate_sql(sql)
+    assert not result.ok and not result.retryable

@@ -35,12 +35,12 @@ def test_declined_never_reaches_the_database_and_is_not_retried(monkeypatch):
     assert a.attempts == 1 and len(calls) == 1
 
 
-def test_blocked_twice_is_blocked_and_never_reaches_the_database(monkeypatch):
-    bad = fake_generation(sql="drop table analytics_marts.dim_repo")
+def test_a_slip_blocked_twice_is_blocked_and_never_reaches_the_database(monkeypatch):
+    bad = fake_generation(sql="select * from dim_repo")  # missing schema prefix: fixable, so retried
     calls = script(monkeypatch, bad, bad)
     monkeypatch.setattr(pipeline, "run_query", lambda sql: pytest.fail("must not run"))
     a = pipeline.ask("q")
-    assert a.status == "blocked" and a.sql is None and a.raw_sql.startswith("drop")
+    assert a.status == "blocked" and a.sql is None and a.raw_sql.startswith("select")
     assert a.attempts == pipeline.MAX_ATTEMPTS and len(calls) == pipeline.MAX_ATTEMPTS
 
 
@@ -60,12 +60,12 @@ def test_ok_first_try_has_one_attempt_and_runs_normalized_sql(monkeypatch):
 
 def test_blocked_then_fixed_succeeds_on_attempt_two(monkeypatch):
     calls = script(monkeypatch,
-                   fake_generation(sql="select * from raw.gh_events"),
+                   fake_generation(sql="select * from dim_repo"),
                    fake_generation(sql=GOOD))
     monkeypatch.setattr(pipeline, "run_query", lambda sql: QueryResult(True, ["repo_id"], [(1,)], milliseconds=5))
     a = pipeline.ask("q")
     assert a.status == "ok" and a.attempts == 2
-    assert "raw.gh_events" in a.message                      # the logged reason for the retry
+    assert "dim_repo" in a.message                     # the logged reason for the retry
     assert calls[0] == []                                    # first attempt: no history
     assert "Table not allowed" in calls[1][-1]["content"]    # second attempt saw the error
     assert calls[1][0]["role"] == "assistant"                # ...and its own earlier answer
@@ -198,3 +198,17 @@ def test_long_refusals_are_never_echoed_back(monkeypatch, model_output):
     monkeypatch.setattr(gen_mod, "_schema_context", lambda: "SCHEMA")
     g = gen_mod.generate_sql("q")
     assert g.sql is None and len(g.refusal) < 100
+
+
+
+
+@pytest.mark.parametrize("sql", [
+    "drop table analytics_marts.dim_repo",
+    "select * from raw.gh_events",
+    "select pg_sleep(60)",
+])
+def test_policy_violations_are_never_retried(monkeypatch, sql):
+    calls = script(monkeypatch, fake_generation(sql=sql), fake_generation(sql=GOOD))
+    monkeypatch.setattr(pipeline, "run_query", lambda s: pytest.fail("must not run"))
+    a = pipeline.ask("q")
+    assert a.status == "blocked" and a.attempts == 1 and len(calls) == 1

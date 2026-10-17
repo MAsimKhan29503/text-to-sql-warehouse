@@ -64,6 +64,9 @@ def _answer(question: str) -> Answer:
                               error_kind="unavailable", **totals)
             status, problem, sql_used, kind = "failed", result.error, check.sql, result.error_kind
         else:
+            if not check.retryable:  # a policy violation, not a slip: never "fix" what the user asked for
+                return Answer(status="blocked", message=check.error, db_ms=db_ms,
+                              error_kind="guardrail", **totals)
             status, problem, sql_used, kind = "blocked", check.error, None, "guardrail"
 
         first_problem = first_problem or problem

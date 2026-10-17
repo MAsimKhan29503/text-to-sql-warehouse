@@ -44,23 +44,26 @@ class ValidationResult:
     ok: bool
     sql: str | None = None    # the SAFE, normalized SQL: the only thing we may execute
     error: str | None = None  # human-readable reason, reusable as feedback for the LLM
+    # True for slips the model can fix (unqualified table, stray second statement, broken syntax).
+    # False for policy violations (writes, other schemas, dangerous functions): those are never "fixed".
+    retryable: bool = False
 
 
-def _reject(reason: str) -> ValidationResult:
-    return ValidationResult(ok=False, error=reason)
+def _reject(reason: str, retryable: bool = False) -> ValidationResult:
+    return ValidationResult(ok=False, error=reason, retryable=retryable)
 
 
 def validate_sql(raw_sql: str) -> ValidationResult:
     if not raw_sql or not raw_sql.strip():
-        return _reject("Empty query.")
+        return _reject("Empty query.", retryable=True)
 
     # 1) Must parse as exactly ONE statement.
     try:
         statements = [s for s in sqlglot.parse(raw_sql, read="postgres") if s is not None]
     except SqlglotError as e:
-        return _reject(f"SQL could not be parsed: {e}")
+        return _reject(f"SQL could not be parsed: {e}", retryable=True)
     if len(statements) != 1:
-        return _reject("Exactly one SQL statement is allowed.")
+        return _reject("Exactly one SQL statement is allowed.", retryable=True)
     tree = statements[0]
 
     # 2) The statement must be a SELECT (or UNION/INTERSECT/EXCEPT of SELECTs).
@@ -92,7 +95,8 @@ def validate_sql(raw_sql: str) -> ValidationResult:
             if table.name.lower() in cte_names:
                 continue
             return _reject(
-                f"Table not allowed: {table.name}. Use {ALLOWED_SCHEMA}.<table> from the schema."
+                f"Table not allowed: {table.name}. Use {ALLOWED_SCHEMA}.<table> from the schema.",
+                retryable=True,  # a missing schema prefix is a slip, not an attack
             )
         if not _ident_is(schema_ident, ALLOWED_SCHEMA) or not any(
             _ident_is(table.this, t) for t in ALLOWED_TABLES
