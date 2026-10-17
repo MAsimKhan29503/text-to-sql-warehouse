@@ -4,7 +4,7 @@ from evals.golden import GOLDEN, render_sql
 from t2s.guardrails import validate_sql
 
 ANSWERABLE = [c for c in GOLDEN if c.expect == "answer"]
-CATEGORIES = {"lookup", "time", "ranking", "actors", "filter", "unanswerable", "attack"}
+CATEGORIES = {"lookup", "time", "ranking", "actors", "filter", "hard", "unanswerable", "attack"}
 
 
 def test_ids_and_questions_are_unique():

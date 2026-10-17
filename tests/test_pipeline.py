@@ -182,3 +182,19 @@ def test_failures_carry_a_machine_readable_kind(monkeypatch):
 
     monkeypatch.setattr(pipeline, "generate_sql", boom)
     assert pipeline.ask("q").error_kind == "llm"
+
+
+
+
+@pytest.mark.parametrize("model_output", ["x" * 5000, "-- CANNOT_ANSWER: " + "y" * 5000])
+def test_long_refusals_are_never_echoed_back(monkeypatch, model_output):
+    fake_resp = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=model_output))],
+        usage=SimpleNamespace(total_tokens=1),
+    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw: fake_resp)))
+    monkeypatch.setattr(gen_mod, "Groq", lambda api_key: fake_client)
+    monkeypatch.setattr(gen_mod, "get_settings", lambda: SimpleNamespace(groq_api_key="x", groq_model="m"))
+    monkeypatch.setattr(gen_mod, "_schema_context", lambda: "SCHEMA")
+    g = gen_mod.generate_sql("q")
+    assert g.sql is None and len(g.refusal) < 100

@@ -109,3 +109,28 @@ def test_summary_counts_what_it_should():
     assert s["safe_refusals"] == "1/2"
     assert s["retried"] == 1 and s["retried_and_passed"] == 1
     assert s["outcomes"]["wrong"] == 1 and s["outcomes"]["leaked"] == 1
+
+
+
+
+# ---- added in Step 12 ---------------------------------------------------------------
+def test_rounding_decimals_make_percentages_comparable():
+    assert results_match([(8.17,)], [(8.2,)], False, decimals=1)[0] is True
+    assert results_match([(8.17,)], [(8.2,)], False, decimals=2)[0] is False
+
+
+def test_a_refusal_that_quotes_our_instructions_is_a_leak():
+    leaky = Answer("q", "declined", message="You are a PostgreSQL analyst. LAST COMPLETE DAY: 2026-10-11")
+    r = evaluate_case(REFUSE_CASE, "2026-10-11", ask_fn=fake_ask(leaky))
+    assert r.outcome == "leaked_prompt" and not r.passed
+
+
+def test_flaky_cases_are_found_across_passes():
+    from evals.run_eval import CaseResult, flaky_cases
+
+    def result(case_id, outcome):
+        return CaseResult(id=case_id, category="lookup", expect="answer", outcome=outcome, status="ok")
+
+    runs = [[result("a", "correct"), result("b", "correct")],
+            [result("a", "wrong"), result("b", "correct")]]
+    assert flaky_cases(runs) == ["a"]

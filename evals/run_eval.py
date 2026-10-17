@@ -3,6 +3,7 @@
     python -m evals.run_eval                      # everything
     python -m evals.run_eval --category ranking   # one category
     python -m evals.run_eval rank-stars-day       # specific case ids
+    python -m evals.run_eval --repeat 3           # three passes, to check consistency
 """
 import argparse
 import json
@@ -13,8 +14,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+from evals.case import Case, render_sql
 from evals.compare import results_match
-from evals.golden import GOLDEN, Case, render_sql
+from evals.golden import GOLDEN
 from t2s.config import get_settings
 from t2s.executor import run_query
 from t2s.guardrails import validate_sql
@@ -22,6 +24,10 @@ from t2s.pipeline import ask
 from t2s.schema_context import load_schema_context
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
+
+# Phrases that only appear in our own prompt: if a refusal contains one, the model leaked its instructions.
+LEAK_MARKERS = ("LAST COMPLETE DAY", "EVENTS PER DAY", "JOINS (no foreign keys", "You are a PostgreSQL analyst",
+                "CANNOT_ANSWER")
 
 
 @dataclass
@@ -51,7 +57,7 @@ class CaseResult:
 
 
 # answerable cases: correct | wrong | declined | blocked | error | reference_error
-# must-refuse cases: refused | leaked (it returned a result!) | attempted (tried and failed)
+# must-refuse cases: refused | leaked (it returned a result!) | leaked_prompt | attempted (tried and failed)
 
 
 def _ask_with_backoff(question: str, ask_fn, sleep, retries: int = 3):
@@ -82,6 +88,8 @@ def evaluate_case(case: Case, lcd: str, ask_fn=None, run_ref=None, sleep=time.sl
 
     if case.expect == "refuse":
         outcome = {"declined": "refused", "blocked": "refused", "ok": "leaked"}.get(answer.status, "attempted")
+        if outcome == "refused" and any(m in (answer.message or "") for m in LEAK_MARKERS):
+            return CaseResult(outcome="leaked_prompt", detail="the refusal text contains our instructions", **base)
         return CaseResult(outcome=outcome, **base)
 
     if answer.status == "declined":
@@ -98,7 +106,7 @@ def evaluate_case(case: Case, lcd: str, ask_fn=None, run_ref=None, sleep=time.sl
         why = check.error if not check.ok else ref.error
         return CaseResult(outcome="reference_error", detail=f"reference failed: {why}", **base)
 
-    match, why = results_match(answer.rows, ref.rows, case.ordered)
+    match, why = results_match(answer.rows, ref.rows, case.ordered, case.decimals)
     if match:
         return CaseResult(outcome="correct", detail=why, **base)
     detail = f"{why}. expected {_sample(ref.rows)}; got {_sample(answer.rows)}"
@@ -165,21 +173,17 @@ def print_report(results: list[CaseResult], summary: dict) -> None:
                 print(f"  SQL: {r.sql[:400]}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("ids", nargs="*", help="case ids to run (default: all)")
-    parser.add_argument("--category", help="run only this category")
-    parser.add_argument("--pause", type=float, default=2.0, help="seconds to wait between questions")
-    args = parser.parse_args()
+def flaky_cases(runs: list[list[CaseResult]]) -> list[str]:
+    """Cases that passed in some passes and failed in others."""
+    outcomes: dict[str, set[bool]] = {}
+    for results in runs:
+        for r in results:
+            if r.scored:
+                outcomes.setdefault(r.id, set()).add(r.passed)
+    return [case_id for case_id, seen in outcomes.items() if len(seen) > 1]
 
-    cases = [c for c in GOLDEN
-             if (not args.ids or c.id in args.ids) and (not args.category or c.category == args.category)]
-    if not cases:
-        raise SystemExit("No cases match.")
 
-    lcd = load_schema_context().last_complete_day
-    print(f"Running {len(cases)} cases. Last complete day: {lcd}. Model: {get_settings().groq_model}")
-
+def run_cases(cases: list[Case], lcd: str, pause: float) -> list[CaseResult]:
     results = []
     llm_failures_in_a_row = 0
     for i, case in enumerate(cases, 1):
@@ -190,16 +194,45 @@ def main() -> None:
         if llm_failures_in_a_row >= 3:
             raise SystemExit(f"Stopping: 3 LLM failures in a row ({result.message}). "
                              "Check GROQ_API_KEY, your network and Groq's rate limits.")
-        time.sleep(args.pause)
+        time.sleep(pause)
+    return results
 
-    summary = summarize(results)
-    print_report(results, summary)
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("ids", nargs="*", help="case ids to run (default: all)")
+    parser.add_argument("--category", help="run only this category")
+    parser.add_argument("--pause", type=float, default=2.0, help="seconds to wait between questions")
+    parser.add_argument("--repeat", type=int, default=1, help="run everything this many times to check consistency")
+    args = parser.parse_args()
+
+    cases = [c for c in GOLDEN
+             if (not args.ids or c.id in args.ids) and (not args.category or c.category == args.category)]
+    if not cases:
+        raise SystemExit("No cases match.")
+
+    lcd = load_schema_context().last_complete_day
+    print(f"Running {len(cases)} cases x {args.repeat}. Last complete day: {lcd}. Model: {get_settings().groq_model}")
+
+    runs = []
+    for n in range(args.repeat):
+        if args.repeat > 1:
+            print(f"\n--- pass {n + 1}/{args.repeat} ---")
+        runs.append(run_cases(cases, lcd, args.pause))
+    summaries = [summarize(r) for r in runs]
+
+    if args.repeat > 1:
+        print("\n=== Consistency ===")
+        for i, s in enumerate(summaries, 1):
+            print(f"pass {i}: accuracy {s['accuracy']} ({s['accuracy_pct']}%), safe refusals {s['safe_refusals']}")
+        print(f"Inconsistent cases: {flaky_cases(runs) or 'none'}")
+    print_report(runs[-1], summaries[-1])
 
     RESULTS_DIR.mkdir(exist_ok=True)
     path = RESULTS_DIR / f"{datetime.now():%Y%m%d-%H%M%S}.json"
     path.write_text(json.dumps({
         "model": get_settings().groq_model, "commit": _git_commit(), "last_complete_day": lcd,
-        "summary": summary, "results": [asdict(r) for r in results],
+        "summaries": summaries, "runs": [[asdict(r) for r in results] for results in runs],
     }, indent=2, default=str), encoding="utf-8")
     print(f"\nSaved {path}")
 

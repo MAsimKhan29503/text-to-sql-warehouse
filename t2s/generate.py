@@ -64,6 +64,10 @@ def extract_sql(text: str) -> str:
     match = _FENCE.search(text)
     return (match.group(1) if match else text).strip()
 
+def _refusal_text(text: str, limit: int = 300) -> str:
+    """Refusals are shown to users. A long reply is not a refusal: never echo it back verbatim."""
+    return text if len(text) <= limit else "The model replied with text instead of a query."
+
 
 def _looks_like_sql(text: str) -> bool:
     return re.match(r"\s*(select|with|\()", text, re.IGNORECASE) is not None
@@ -94,10 +98,10 @@ def generate_sql(question: str , history: list[dict] | None = None) -> Generatio
     tokens = resp.usage.total_tokens
     sql = extract_sql(raw)
     if sql.upper().startswith("-- CANNOT_ANSWER"):
-        reason = sql.removeprefix("-- CANNOT_ANSWER:").strip()
+        reason = _refusal_text(sql.removeprefix("-- CANNOT_ANSWER:").strip())
         return Generation(question, None, reason, raw, seconds, tokens)
     if not _FENCE.search(raw) and not _looks_like_sql(sql):
-        return Generation(question, None, raw, raw, seconds, tokens)  # plain-text refusal
+        return Generation(question, None, _refusal_text(raw), raw, seconds, tokens)  # plain-text refusal
     return Generation(question, sql, None, raw, seconds, tokens)
 
 
