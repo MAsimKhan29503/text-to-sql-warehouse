@@ -162,3 +162,23 @@ def test_history_is_sent_to_the_model_after_the_question(monkeypatch):
     roles = [m["role"] for m in sent["messages"]]
     assert roles == ["system", "user", "assistant", "user"]
     assert sent["messages"][1]["content"] == "the question"
+
+
+
+
+
+def test_failures_carry_a_machine_readable_kind(monkeypatch):
+    bad = fake_generation(sql="drop table analytics_marts.dim_repo")
+    script(monkeypatch, bad, bad)
+    assert pipeline.ask("q").error_kind == "guardrail"
+
+    script(monkeypatch, fake_generation(sql=GOOD), fake_generation(sql=GOOD))
+    monkeypatch.setattr(pipeline, "run_query",
+                        lambda sql: QueryResult(False, error="too slow", error_kind="timeout"))
+    assert pipeline.ask("q").error_kind == "timeout"
+
+    def boom(question, history=None):
+        raise ConnectionError("down")
+
+    monkeypatch.setattr(pipeline, "generate_sql", boom)
+    assert pipeline.ask("q").error_kind == "llm"

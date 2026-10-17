@@ -21,6 +21,7 @@ class Answer:
     db_ms: int = 0
     tokens: int = 0
     attempts: int = 1
+    error_kind: str | None = None     # guardrail | timeout | resources | database | unavailable | llm
 
 
 def _feedback(problem: str) -> str:
@@ -40,7 +41,8 @@ def _answer(question: str) -> Answer:
             gen = generate_sql(question, history)
         except Exception as e:  # network error, rate limit, bad key: report it, don't crash
             return Answer(question, "failed", message=f"LLM call failed: {type(e).__name__}: {e}",
-                          llm_seconds=llm_seconds, tokens=tokens, db_ms=db_ms, attempts=attempt)
+                          llm_seconds=llm_seconds, tokens=tokens, db_ms=db_ms, attempts=attempt,
+                          error_kind="llm")
         llm_seconds += gen.seconds
         tokens += gen.total_tokens
         totals = dict(question=question, raw_sql=gen.sql, llm_seconds=llm_seconds,
@@ -58,14 +60,16 @@ def _answer(question: str) -> Answer:
                 return Answer(status="ok", sql=check.sql, message=note, columns=result.columns,
                               rows=result.rows, db_ms=db_ms, **totals)
             if result.error_kind == "unavailable":  # not the model's fault: retrying cannot help
-                return Answer(status="failed", sql=check.sql, message=result.error, db_ms=db_ms, **totals)
-            status, problem, sql_used = "failed", result.error, check.sql
+                return Answer(status="failed", sql=check.sql, message=result.error, db_ms=db_ms,
+                              error_kind="unavailable", **totals)
+            status, problem, sql_used, kind = "failed", result.error, check.sql, result.error_kind
         else:
-            status, problem, sql_used = "blocked", check.error, None
+            status, problem, sql_used, kind = "blocked", check.error, None, "guardrail"
 
         first_problem = first_problem or problem
         if attempt == MAX_ATTEMPTS:
-            return Answer(status=status, sql=sql_used, message=problem, db_ms=db_ms, **totals)
+            return Answer(status=status, sql=sql_used, message=problem, db_ms=db_ms,
+                          error_kind=kind, **totals)
 
         # Show the model its own answer and what went wrong, then try again.
         history += [
